@@ -117,12 +117,61 @@ Rebuild: `HF_HOME=$PWD/../triage-model/hf-cache ../triage-model/.venv/bin/python
 resolve to wherever the file lives — point `cache/` handling at the runtime
 location during the migration window).
 
+## Cross-encoder rerank (api#95 final slice — shipped, default OFF)
+
+`embed_daemon.py` answers a third op:
+`{"op": "rerank", "q": str, "uuids": [uuid]} → {"results": [[uuid, logit], …]}`
+best-first. Scoring-only by contract — the api composes planes and owns
+scope enforcement; unknown/superseded/textless uuids drop out. Per item
+ONE pair: (query, document passage) where the passage is title +
+tag-stripped body prefix (~1700 chars, style/script block content
+removed) — the cross-encoder's edge over cosine is seeing query and
+document jointly, so it wants the widest passage its 512-token window
+holds, not a single embedder chunk. Model: **BAAI/bge-reranker-base**
+int8 (`torch.ao.quantization.quantize_dynamic` — no new dependencies),
+lazy-loaded on first rerank request, sticky for the daemon lifetime,
+released by the idle self-exit.
+
+**Replay verdict (2026-11-25, `tools/golden_replay.py` over
+`tools/golden_set.json`, 8 curated queries on live prod data): 0 win /
+7 par / 1 loss — and the loss itself was truth-incompleteness, i.e.
+neutral overall.** The api `rerank` param therefore defaults to **off**;
+the plane is opt-in (`rerank=true` on semantic/hybrid at the verb,
+`&rerank=1` on the console) and costs ~0.5–1s/query. Replay learnings
+worth keeping:
+
+- Single-chunk pairing LOST 4/6 in the first replay — document-level
+  signals ("Lazada" brand text, "Nov 2026" bill periods) sit outside any
+  one chunk. Passages fixed it; don't regress to chunks.
+- Ground truth must be curated from body text, not titles: the
+  "SGLVGTI"-titled emails ARE Lazada invoices; there are SIX November
+  Senoko bills (no text ranker encodes recency — that's a recency-sort
+  feature, not a relevance one).
+- Known debt: CSS/style text still pollutes the EMBEDDER's chunks
+  (fixing `chunk_texts_for` would invalidate the whole hash-keyed
+  embedding cache → multi-hour re-embed; deliberate follow-up, tracked
+  in the session notes).
+- Memory: with the reranker resident the daemon peaks ~2.3G RSS —
+  **above the deploy unit's `MemoryHigh=2G`** (fits `MemoryMax=2500M`
+  with thin headroom). If rerank sees regular use, bump the unit to
+  `MemoryHigh=2500M/MemoryMax=3G` first. Upgrade path if quality ever
+  disappoints: `BAAI/bge-reranker-v2-m3` int8 (same load path,
+  +~400MB, 1.5–4s/query — outside the ~1s budget).
+
+Replay: start the daemon (`MEMOGARDEN_EMBED_SOCK=/tmp/golden-embed.sock
+… python embed_daemon.py &`, the socket env keeps systemd's socket
+untouched) then `MEMOGARDEN_EMBED_SOCK=/tmp/golden-embed.sock …
+tools/golden_replay.py` — prints win/par/loss + MRR@5 and writes a
+`results/rerank_replay-*.json` artifact. First rerank call downloads the
+model into the shared HF cache.
+
 ## History
 
 - 2026-11-22/23 — search-quality diagnosis (61.5% of email bodies truncated
   out of the old single-embedding index; mean-pooling on a CLS-trained model).
 - 2026-11-24 — items 1+2 shipped: CLS pooling + query instruction prefix,
   chunked-body best-passage index (211,858 chunks / 63,782 items).
+- 2026-11-25 — rerank plane shipped (opt-in; replay-neutral, see above).
 - api#95 Phase 1 (FTS5 lexical plane + console) lives in memogarden-system +
   memogarden-api; Phase 2 slice A (verb semantic/hybrid strategies) is staged
   in memogarden-api.

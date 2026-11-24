@@ -1,0 +1,101 @@
+{
+  "comment": "Golden search-replay set, curated 2026-11-25 against live prod soil.db via the worktree daemon; v2 truth after the first replay taught that single-answer curation was cosine-shaped (multiple November bills / multiple AWS receipts / multiple flight bookings are equally valid answers — expected = the equivalent-answer set, best-guess first). 'Senoko bill November' has SIX valid November bills (2022..2026) — a recall-sanity class, not a disambiguation one: neither cosine nor a cross-encoder encodes recency. No CJK queries: bge-small recall for CJK is documented lexical-fallback territory — rerank reorders candidates, it cannot create them.",
+  "queries": [
+    {
+      "q": "Senoko bill November",
+      "expected": [
+        "soil_cd06de37-fd1e-48d4-8a72-4411e7a08ffd",
+        "soil_c6afb050-d919-4cab-b6a4-25ac7d0b0314",
+        "soil_020c742f-0461-478a-8c8b-74183cba3167",
+        "soil_acbf484e-62b4-4dbe-a46a-8f04ea3561ed",
+        "soil_7f2c9bb4-1337-4cc9-976d-7ee746b86931",
+        "soil_20f0df73-72d4-4b90-bda2-79635eddf715",
+        "soil_fa2ed366-5bee-434d-8b28-590bfdfcdc48"
+      ]
+    },
+    {
+      "q": "Lazada invoice for my order",
+      "comment": "v3 truth: the SGLVGTI-titled emails ARE Lazada invoices (body: 'Warm greeting from Lazada!') — v1 truth was title-shaped and wrongly excluded them",
+      "expected": [
+        "soil_d4161cb4-d151-43b1-a995-1c08d4d7d2dc",
+        "soil_d0c067b3-8511-4619-946a-d3e4bd01662f",
+        "soil_c3094288-023b-46e3-9664-63a33dd2c4e3",
+        "soil_9ef0f7f6-dcf5-4a7f-b2da-f08ce113f70d",
+        "soil_1a66b4f1-60df-4da8-b1e4-32fe2b44fad4",
+        "soil_3543b460-c328-4c26-992e-b0a1498e753d",
+        "soil_d25d83bf-628f-492c-b0bc-992a6fff546f",
+        "soil_f3ff1037-e135-4145-81d5-ddc929546ba8"
+      ]
+    },
+    {
+      "q": "AWS receipt",
+      "expected": [
+        "soil_81c43a4b-9d7c-49dc-9ba7-bb1fc4fd4d63",
+        "soil_63d26e34",
+        "soil_ef668789",
+        "soil_7dce59d5",
+        "soil_924fa930",
+        "soil_ec421d96",
+        "soil_cf969895",
+        "soil_534f81f1"
+      ]
+    },
+    {
+      "q": "school fee payment",
+      "expected": [
+        "soil_ec3ced6d-343e-4f6e-ade4-64d6686e1d5c",
+        "soil_ee1e3761-52ee-4c73-8c29-a19fb5b16878",
+        "soil_180df537-d8fc-44de-8037-1f10f5943d04"
+      ]
+    },
+    {
+      "q": "flight booking confirmation",
+      "expected": [
+        "soil_ac616a38-ee42-4822-a4cf-93bfa9e37abc",
+        "soil_fef120ad-1ffe-4973-9fd5-ccb52aaf687e",
+        "soil_257a9d5b-01a4-49f1-8467-d5c5d25a5de8",
+        "soil_8aad5008-223f-49ee-84e3-a538d5b130b4",
+        "soil_ffd3bd78-ea9c-44f5-8c70-8847495a73d6",
+        "soil_6aaba1d3-52ce-44f1-be86-42f2748ed705",
+        "soil_e47de876-e253-4860-a351-31cca53c69a8",
+        "soil_6451f0c4-1f8e-4e3d-8924-b7e0a3191f62",
+        "soil_b548b86f-8619-4610-a49a-7cda12c52ced",
+        "soil_c2b5caf2-60ce-4f2a-ba8d-65d9921fea39",
+        "soil_d461ad0d-ef02-4ebf-bd74-7ee70797f485",
+        "soil_be9c6fde-3f12-4560-bd10-675d52a9b3ec",
+        "soil_7c3f0321-d441-4ec6-8399-6821feb41a04"
+      ]
+    },
+    {
+      "q": "insurance policy renewal",
+      "expected": [
+        "soil_030a0b89-ae8d-402e-9231-ccf31253ed24",
+        "soil_4a141699-969f-433e-8e27-6f298cb24f93",
+        "soil_b73bbfd0-7531-4725-91a9-16e8815fc05c"
+      ]
+    },
+    {
+      "q": "RedMart invoice",
+      "comment": "body-signal class: titles are generic 'Your invoice for order N' — RedMart lives in the body (CSS-garbage templates; passage style-strip makes it visible)",
+      "expected": [
+        "soil_c3094288-023b-46e3-9664-63a33dd2c4e3",
+        "soil_d4161cb4-d151-43b1-a995-1c08d4d7d2dc",
+        "soil_676fcd22-6916-435a-b368-1bf6064911a3",
+        "soil_f8d2d5e6-10bd-46bb-ba49-e4082490597e",
+        "soil_4145bcfa-c864-443c-87b9-ee71a47553a3",
+        "soil_23b197e0-f372-4706-bcf7-5971b02963a1"
+      ]
+    },
+    {
+      "q": "AWS account past due",
+      "comment": "body-signal complement: the past-due notice emails (vs the receipt/statement class)",
+      "expected": [
+        "soil_b51d35b3-36de-48b8-be13-670eca607557",
+        "soil_bd49d9e6-9cbb-4a32-92c8-3b6fb21274c3",
+        "soil_b9314e98-224d-4b29-baa1-6c9a76ae2de8",
+        "soil_87d600f5-c1ce-47ee-bb3c-75deded3cc0d",
+        "soil_d175381a-9e13-4cc1-9bfa-8beeb639bbf0"
+      ]
+    }
+  ]
+}
