@@ -143,7 +143,15 @@ def rerank(req, conn, idx, embed_query):
     covers exactly the uuids that could be scored).
     """
     q = str(req.get("q", ""))[:1000]
-    uuids = [str(u) for u in (req.get("uuids") or [])][:reranker.MAX_PAIRS]
+    seen_req = set()
+    uuids = []
+    for u in (req.get("uuids") or []):
+        u = str(u)
+        if u not in seen_req:           # dedup BEFORE the cap: duplicates
+            seen_req.add(u)             # must not crowd out unique uuids
+            uuids.append(u)
+        if len(uuids) >= reranker.MAX_PAIRS:
+            break
     if not q or not uuids:
         return {"results": []}
     marks = ",".join("?" * len(uuids))

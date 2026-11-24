@@ -9,14 +9,21 @@ first rerank request and sticky for the daemon lifetime — the wake path
 everything, so the reranker is a transient resident like torch itself.
 
 Budget facts (2026-11-25 measurement): daemon RSS 754MB with bge-small +
-index; int8 reranker adds ~300-400MB → peak ~1.2-1.3G, clear of
-MemoryHigh=2G. ~0.4-1s per 20-30 pairs on CPU. Upgrade path: swap REPO
-to BAAI/bge-reranker-v2-m3 (same load path; +~400MB and 1.5-4s/query —
+index; with the int8 reranker resident the daemon peaks **~2.3G RSS —
+ABOVE the deploy unit's MemoryHigh=2G** (fits MemoryMax=2500M with thin
+headroom). Bump the unit before enabling rerank regularly, and note the
+first request in a fresh daemon blocks the accept loop (ping/search
+head-of-line) for the HF download + quantize pass (~240s budget).
+~0.5-1s per 20-30 pairs on CPU afterwards. Upgrade path: swap REPO to
+BAAI/bge-reranker-v2-m3 (same load path; +~400MB and 1.5-4s/query —
 outside the accepted ~1s budget).
 
 Memory safety: torch/transformers import INSIDE functions so this module
 imports cleanly without torch (no-torch tests monkeypatch score_pairs or
-_seed with fakes).
+_seed with fakes). _load()'s torch.set_num_threads is process-wide and
+persists — after the first rerank it also caps the embedder's intra-op
+threads (no-op on 4-core deploys; a larger host would see slower
+search).
 """
 import os
 

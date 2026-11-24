@@ -76,6 +76,11 @@ def main():
         q = entry["q"]
         expected = set(entry["expected"])
         base = _daemon_req({"op": "search", "q": q, "k": K})
+        if "results" not in base:
+            print(f"SKIP {q!r}: daemon search error: {base.get('error')}")
+            rows.append({"q": q, "error": base.get("error"),
+                         "verdict": "skip"})
+            continue
         base_order = [u for u, _ in base["results"]]
         # 240s: the FIRST rerank call in a fresh daemon downloads + int8-
         # quantizes the cross-encoder (~1.1GB from HF + quantize pass)
@@ -104,12 +109,13 @@ def main():
         mark = "  <<<" if base_order[:1] != rr_order[:1] else ""
         print(f"{verdict:4}  base {bm:.3f} -> rr {rm:.3f}  {q!r}{mark}")
 
-    n = len(rows)
+    scored = [r for r in rows if r.get("verdict") != "skip"]
+    n = len(scored)
     print(f"\n{n} queries: {wins} win / {pars} par / {losses} loss  "
           f"({time.time() - t0:.1f}s)")
     print(f"mean MRR@5: base "
-          f"{sum(r['base_mrr5'] for r in rows) / max(n, 1):.3f} -> "
-          f"rerank {sum(r['rerank_mrr5'] for r in rows) / max(n, 1):.3f}")
+          f"{sum(r['base_mrr5'] for r in scored) / max(n, 1):.3f} -> "
+          f"rerank {sum(r['rerank_mrr5'] for r in scored) / max(n, 1):.3f}")
     RESULTS.mkdir(exist_ok=True)
     out = RESULTS / f"rerank_replay-{time.strftime('%Y%m%dT%H%M%S')}.json"
     out.write_text(json.dumps({

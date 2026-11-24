@@ -67,9 +67,49 @@ def test_rerank_op_empty_and_cap(soil, monkeypatch):
     monkeypatch.setattr(reranker, "score_pairs", lambda pairs: [0.0] * len(pairs))
     assert rerank({"q": "x", "uuids": []}, soil, None, None) == {"results": []}
     assert rerank({"q": "", "uuids": ["itemA"]}, soil, None, None) == {"results": []}
-    many = ["itemA"] + [f"u{i}" for i in range(reranker.MAX_PAIRS + 5)]
+    # duplicates are deduped BEFORE the cap (they must not crowd out
+    # unique uuids) and the cap truncates head-first
+    many = (["itemA"] * 10
+            + [f"u{i:03d}" for i in range(reranker.MAX_PAIRS + 5)])
     out = rerank({"q": "q", "uuids": many}, soil, None, None)
-    assert len(out["results"]) <= reranker.MAX_PAIRS
+    scored = [u for u, _ in out["results"]]
+    assert len(scored) <= reranker.MAX_PAIRS
+    assert len(set(scored)) == len(scored)          # no duplicates scored
+
+
+def test_score_pairs_batch_boundary():
+    """>BATCH pairs stay aligned across batch splits (fake model returns
+    positional logits; misalignment would shuffle scores)."""
+    class FakeLogits:
+        def __init__(self, seq):
+            self._seq = seq
+        def squeeze(self, _):
+            return self
+        def tolist(self):
+            return self._seq
+    class FakeOut:
+        def __init__(self, seq):
+            self.logits = FakeLogits(seq)
+    class FakeModel:
+        def __init__(self):
+            self.seen = 0
+        def __call__(self, **enc):
+            b = len(enc["pairs"])
+            seq = list(range(self.seen, self.seen + b))
+            self.seen += b
+            return FakeOut(seq)
+    class FakeTok:
+        def __call__(self, pairs, **kw):
+            return {"pairs": pairs}
+    model = FakeModel()
+    reranker._seed(FakeTok(), model)
+    try:
+        n = reranker.BATCH + 3
+        out = reranker.score_pairs([("q", f"p{i}") for i in range(n)])
+        assert out == list(range(n))       # identity across both batches
+        assert model.seen == n
+    finally:
+        reranker._state.clear()
 
 
 def test_score_pairs_lazy_and_seeded():
