@@ -24,6 +24,31 @@ socket.
 - **`tools/smoke_compare.py`** — one-command old-vs-new ranking comparison
   for validating search-quality changes.
 
+## Where the indexes live (two planes, two storage models)
+
+The **lexical plane** is not a separate database: `item_fts` is an FTS5
+virtual table **inside `soil.db` itself**, declared
+`content='item'` (external content) — document text is stored once in
+`item.data`, and the index keeps only the token→rowid inverted index in
+its shadow tables (~600 MB over a ~2.4 GB corpus at ~266k items).
+Maintenance is trigger-based, never application-managed: an
+`AFTER INSERT` trigger indexes new rows; creation stamps an atomic
+`item_fts_created_maxrowid` boundary so the trigger can never overlap
+with the resumable `backfill_item_fts()` sweep; `rebuild_item_fts()`
+reconstructs everything from scratch (rebuild parity = the integrity
+check). Known gap: the index is insert-only today — superseded versions'
+tokens accumulate until the proposed lifecycle triggers (FTS5 `'delete'`
+commands on supersede/delete, re-index on data amendment) land;
+`live_only` filtering is the current compensator. The tokenizer is
+`unicode61` (CJK runs are not tokenized — the console falls back to
+`LIKE` for CJK/substring recall).
+
+The **semantic plane** (this repo) is the opposite storage model: derived
+cache *files* — `search_index.npz` (a stacked `(N, 384)` float32 matrix,
+~300 MB at 211,858 chunks), `search_index_ids.json` (chunk ids, grouped
+per item) and `search_meta.json` (per-item type/scopes/n_chunks) — fully
+rebuildable, gitignored, and never touching the database.
+
 ## Daemon protocol
 
 One JSON request per connection, socket `~/.local/share/memogarden/triage-model/embed.sock`:
