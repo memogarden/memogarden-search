@@ -27,6 +27,7 @@ Run: HF_HOME=$PWD/hf-cache .venv/bin/python build_search_index.py
 """
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -40,7 +41,10 @@ from transformers import AutoModel, AutoTokenizer
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 DB = Path.home() / ".local/share/memogarden/soil.db"
-CACHE = HERE / "cache"
+# migration window (triage-model → this repo): point MEMOGARDEN_SEARCH_CACHE
+# at the runtime cache until it moves into this repo at the slice-B cutover
+CACHE = Path(os.environ.get(
+    "MEMOGARDEN_SEARCH_CACHE", str(HERE / "cache")))
 INDEX_NPZ = CACHE / "search_index.npz"
 INDEX_IDS = CACHE / "search_index_ids.json"
 INDEX_META = CACHE / "search_meta.json"

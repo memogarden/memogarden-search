@@ -1,0 +1,19 @@
+[Unit]
+Description=MemoGarden embed daemon — lazy semantic search model layer
+Requires=memogarden-embed.socket
+
+[Service]
+ExecStart=%h/memogarden/memogarden-search/.venv/bin/python %h/memogarden/memogarden-search/embed_daemon.py
+WorkingDirectory=%h/memogarden/memogarden-search
+Environment=HF_HOME=%h/memogarden/triage-model/hf-cache
+# migration window only: the runtime cache still lives in triage-model;
+# remove at the slice-B cutover once cache/ moves into this repo
+Environment=MEMOGARDEN_SEARCH_CACHE=%h/memogarden/triage-model/cache
+
+# idle self-exit is in-daemon (600s) and clean — no restart, the socket
+# unit re-activates on the next connection
+Restart=no
+# torch + the ~300MB chunked index are transient residents
+MemoryHigh=2G
+MemoryMax=2500M
+TimeoutStopSec=10

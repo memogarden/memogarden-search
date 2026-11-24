@@ -39,6 +39,30 @@ daemon's scope mask uses capture-time scope sets — it is **defense-in-depth
 only**; enforcement happens at the API boundary under current-time visibility
 (RFC-011 §4.9(3)).
 
+## Socket activation (staged — not yet installed)
+
+`deploy/memogarden-embed.socket` + `deploy/memogarden-embed.service` are the
+slice-B successor of the API's lazy Popen spawn: systemd owns the listening
+socket (`~/.local/share/memogarden/triage-model/embed.sock`, 0600,
+`RemoveOnStop`) and starts the daemon on first connect; the daemon adopts the
+passed fd (`LISTEN_FDS`) and keeps its in-daemon 600s idle self-exit, so RSS
+returns to zero between searches while systemd re-activates instantly on the
+next query. Without the units installed, the daemon self-binds exactly as
+before — the API's spawn fallback remains as belt-and-suspenders either way.
+
+Install (user units — after the slice-B cutover gives this repo its own
+`.venv`; `MEMOGARDEN_SEARCH_CACHE` in the unit covers the migration window):
+
+```
+cp deploy/memogarden-embed.{socket,service} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now memogarden-embed.socket
+```
+
+Verify: `systemctl --user status memogarden-embed.socket`, then any console
+search in semantic mode — first hit shows `memogarden-embed.service`
+active, and it self-exits after 10 idle minutes.
+
 ## Runtime layout (migration note)
 
 Code graduated here from the untracked `~/memogarden/triage-model/`

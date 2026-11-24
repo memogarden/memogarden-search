@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Lazy embed/search daemon for the operator console's semantic search.
 
-Spawned ON DEMAND by memogarden-api when /items/search runs in semantic
-mode — never a systemd unit (architecture decision 2026-11-22: inference
-stays out of the serving process; the daemon is a model-layer child with
-idle self-exit). Loads bge-small + the CHUNKED search index once, then
-answers search requests over a unix socket owned by the operator (0600
-dir).
+Activated ON DEMAND — by systemd socket activation (deploy/
+memogarden-embed.socket, the slice-B successor: systemd owns the
+listening socket and starts this daemon on first connect) or, when the
+units aren't installed, by memogarden-api's lazy Popen spawn fallback.
+Either way the architecture decision stands (2026-11-22): query-time
+inference never lives in the serving process. Loads bge-small + the
+CHUNKED search index once, then answers search requests over a unix
+socket owned by the operator (0600), idle self-exits after 600s (zero
+resident RSS between searches).
 
 Search-quality items 1+2 (2026-11-24): queries are CLS-pooled (matching
 the index rebuild) and prefixed with the bge v1.5 passage-retrieval
@@ -32,6 +35,10 @@ import numpy as np
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 SOCK = Path.home() / ".local/share/memogarden/triage-model/embed.sock"
+# migration window (triage-model → this repo): the runtime cache still
+# lives in the old home until the slice-B cutover moves it
+CACHE_DIR = Path(os.environ.get(
+    "MEMOGARDEN_SEARCH_CACHE", str(HERE / "cache")))
 IDLE_SECONDS = 600
 REPO = "BAAI/bge-small-en-v1.5"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
@@ -41,9 +48,9 @@ def main():
     import torch
     from transformers import AutoModel, AutoTokenizer
 
-    index_npz = HERE / "cache" / "search_index.npz"
-    index_ids = HERE / "cache" / "search_index_ids.json"
-    index_meta = HERE / "cache" / "search_meta.json"
+    index_npz = CACHE_DIR / "search_index.npz"
+    index_ids = CACHE_DIR / "search_index_ids.json"
+    index_meta = CACHE_DIR / "search_meta.json"
     if not (index_npz.exists() and index_ids.exists()
             and index_meta.exists()):
         print("chunked search index missing — run build_search_index.py "
@@ -75,15 +82,25 @@ def main():
     print(f"daemon ready: {len(ids)} chunks over {len(item_ids)} items",
           flush=True)
 
-    if SOCK.exists():
-        SOCK.unlink()
-    SOCK.parent.mkdir(parents=True, exist_ok=True)
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(str(SOCK))
-    os.chmod(SOCK, 0o600)
-    srv.listen(4)
-    srv.settimeout(IDLE_SECONDS)
-    print(f"listening on {SOCK}", flush=True)
+    listen_fds = int(os.environ.get("LISTEN_FDS", "0") or 0)
+    if listen_fds >= 1:
+        # systemd socket activation (deploy/memogarden-embed.socket): the
+        # listening socket arrives as fd 3 (SD_LISTEN_FDS_START) already
+        # bound + listening — adopt it; do NOT unlink or re-bind the path
+        # systemd owns (RemoveOnStop=true cleans it up on stop)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, fileno=3)
+        srv.settimeout(IDLE_SECONDS)
+        print("listening on systemd-passed socket (fd 3)", flush=True)
+    else:
+        if SOCK.exists():
+            SOCK.unlink()
+        SOCK.parent.mkdir(parents=True, exist_ok=True)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(str(SOCK))
+        os.chmod(SOCK, 0o600)
+        srv.listen(4)
+        srv.settimeout(IDLE_SECONDS)
+        print(f"listening on {SOCK}", flush=True)
 
     @torch.no_grad()
     def embed_query(text):

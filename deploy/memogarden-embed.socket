@@ -1,0 +1,10 @@
+[Unit]
+Description=MemoGarden embed daemon socket (api#95 semantic plane)
+
+[Socket]
+ListenStream=%h/.local/share/memogarden/triage-model/embed.sock
+SocketMode=0600
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target
