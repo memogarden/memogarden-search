@@ -11,17 +11,19 @@ Search-quality items 1+2 (operator decision 2026-11-24):
 
 Embeds every live text-bearing fact (Email, Attachment, Note, Entry, Event) and
 writes (chunk_id = f"{uuid}#{i}", rows grouped per uuid in item order):
-    cache/search_index.npz       vecs: (N,384) float32 — live items only
+    cache/search_index.npy       vecs: (N,384) float32, mmap-able — live items
     cache/search_index_ids.json  [chunk_id, ...] aligned with vecs rows
     cache/search_meta.json       uuid -> {type, scopes, canonical_at, title, n_chunks}
+    cache/index_state.json       {"watermark": change_log seq the index reflects}
     cache/search_emb.npz         vecs: chunk-level embedding cache (all items)
     cache/search_emb_ids.json    [chunk_id, ...] aligned with cache rows
     cache/search_emb_meta.json   chunk_id -> sha256(chunk_text)[:16]
 
 Cache is chunk-granular and hash-keyed: unchanged text re-embeds nothing, and
-the build is resumable (periodic saves). NOTE: embeddings from the pre-chunked
-mean-pooled format are NOT reusable — old-format caches (uuid-keyed npz without
-*_ids.json) are ignored, so the first build after this change is full.
+the build is resumable (periodic saves). After a build, the daemon's
+catch-up-on-wake only embeds items whose change_log seq postdates the
+watermark (see index_store.py). Legacy npz search_index.npz is removed on
+write; pre-chunked mean-pooled caches were never reusable anyway.
 
 Run: HF_HOME=$PWD/hf-cache .venv/bin/python build_search_index.py
 """
@@ -40,12 +42,13 @@ from transformers import AutoModel, AutoTokenizer
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-DB = Path.home() / ".local/share/memogarden/soil.db"
-# migration window (triage-model → this repo): point MEMOGARDEN_SEARCH_CACHE
-# at the runtime cache until it moves into this repo at the slice-B cutover
+DB = Path(os.environ.get(
+    "MEMOGARDEN_SOIL_DB",
+    str(Path.home() / ".local/share/memogarden/soil.db")))
 CACHE = Path(os.environ.get(
     "MEMOGARDEN_SEARCH_CACHE", str(HERE / "cache")))
-INDEX_NPZ = CACHE / "search_index.npz"
+VEC_NPY = CACHE / "search_index.npy"     # mmap-able index (0-load at wake)
+LEGACY_NPZ = CACHE / "search_index.npz"  # pre-mmap format, removed on write
 INDEX_IDS = CACHE / "search_index_ids.json"
 INDEX_META = CACHE / "search_meta.json"
 EMB_CACHE = CACHE / "search_emb.npz"
@@ -56,12 +59,34 @@ TYPES = ("Email", "Attachment", "Note", "Entry", "Event")
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"\s+")
 
+import index_store  # noqa: E402  (after sys.path insert)
+
 CHUNK_CHARS = 600
 CHUNK_OVERLAP = 75
 MAX_CHUNKS = 12          # ~7.2k chars/item coverage — full for ~p90 email bodies
 TITLE_CAP = 200
 EMB_BATCH = 96
 SAVE_EVERY_BATCHES = 40  # resume point cost: one stacked-npz rewrite (~300MB)
+
+
+def load_bge():
+    """Shared model loader (builder + daemon catch-up)."""
+    tok = AutoTokenizer.from_pretrained(REPO)
+    model = AutoModel.from_pretrained(REPO).eval()
+    return tok, model
+
+
+@torch.no_grad()
+def embed_texts(texts, tok, model):
+    """CLS-pooled + L2-normalized embeddings, batched (bge training pooling)."""
+    outs = []
+    for i in range(0, len(texts), EMB_BATCH):
+        enc = tok(texts[i:i + EMB_BATCH], padding=True, truncation=True,
+                  max_length=512, return_tensors="pt")
+        o = model(**enc)
+        e = o.last_hidden_state[:, 0]
+        outs.append(torch.nn.functional.normalize(e, dim=-1))
+    return torch.cat(outs).numpy().astype(np.float32)
 
 
 def chunk_text(text):
@@ -139,19 +164,7 @@ def main():
     print(f"live text-bearing facts: {len(items)} ({n_items} with text), "
           f"chunks: {len(chunk_texts)}", flush=True)
 
-    tok = AutoTokenizer.from_pretrained(REPO)
-    model = AutoModel.from_pretrained(REPO).eval()
-
-    @torch.no_grad()
-    def embed(texts):
-        outs = []
-        for i in range(0, len(texts), EMB_BATCH):
-            enc = tok(texts[i:i + EMB_BATCH], padding=True, truncation=True,
-                      max_length=512, return_tensors="pt")
-            o = model(**enc)
-            e = o.last_hidden_state[:, 0]        # CLS pooling (bge training)
-            outs.append(torch.nn.functional.normalize(e, dim=-1))
-        return torch.cat(outs).numpy().astype(np.float32)
+    tok, model = load_bge()
 
     # chunk-level cache: chunk_id -> vec, valid while text hash matches
     emb_vecs, emb_hash = {}, {}
@@ -170,7 +183,7 @@ def main():
     batch_no = 0
     for i in range(0, len(todo), EMB_BATCH):
         batch = todo[i:i + EMB_BATCH]
-        E = embed([chunk_texts[c] for c in batch])
+        E = embed_texts([chunk_texts[c] for c in batch], tok, model)
         for cid, e in zip(batch, E):
             emb_vecs[cid] = e
             emb_hash[cid] = chunk_hashes[cid]
@@ -194,9 +207,14 @@ def main():
     vecs = np.empty((len(idx_rows), 384), dtype=np.float32)
     for k, r in enumerate(idx_rows):
         vecs[k] = r
-    np.savez_compressed(INDEX_NPZ, vecs=vecs)
+    np.save(VEC_NPY, vecs)                    # mmap-able (0-cost daemon load)
+    if LEGACY_NPZ.exists():
+        LEGACY_NPZ.unlink()
     INDEX_IDS.write_text(json.dumps(idx_ids))
     INDEX_META.write_text(json.dumps(items))
+    index_store.write_watermark(
+        CACHE, index_store.max_change_seq(con),
+        extra={"index_chunks": len(idx_ids)})
     print(f"index written: {len(idx_ids)} chunks over "
           f"{sum(1 for u in items if items[u]['n_chunks'])} items "
           f"({time.time() - t0:.0f}s total)", flush=True)

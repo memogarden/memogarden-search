@@ -21,6 +21,15 @@ socket.
   L2-norm (bge-small's training pooling; queries additionally get the bge v1.5
   passage-retrieval instruction prefix on the daemon side), and writes a
   chunk-level, hash-keyed cache so rebuilds embed only new/changed text.
+- **`index_store.py`** — the index format (mmap-able `search_index.npy` +
+  ids/meta JSON + `index_state.json` watermark) and the change_log planner.
+  On every wake the daemon re-indexes items the trigger-maintained
+  change_log (system#12) says changed since the watermark: new/changed
+  items embed (unchanged text is free via the hash cache), superseded or
+  hard-deleted items leave the index — bounded per wake, watermark
+  persisted per pass.
+- **`tests/`** — no-torch tests for the store and planner
+  (`.venv/bin/python -m pytest tests/`; pytest included in this repo's venv).
 - **`tools/smoke_compare.py`** — one-command old-vs-new ranking comparison
   for validating search-quality changes.
 
