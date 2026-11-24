@@ -57,6 +57,8 @@ EMB_META = CACHE / "search_emb_meta.json"
 REPO = "BAAI/bge-small-en-v1.5"
 TYPES = ("Email", "Attachment", "Note", "Entry", "Event")
 TAG_RE = re.compile(r"<[^>]+>")
+BLOCK_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1\s*>",
+                      re.IGNORECASE | re.DOTALL)
 WS_RE = re.compile(r"\s+")
 
 import index_store  # noqa: E402  (after sys.path insert)
@@ -114,23 +116,58 @@ def chunk_text(text):
     return out
 
 
-def chunk_texts_for(d, _type):
-    """Title-prepended chunks for one item's data dict."""
+def _title_body(d, _type, strip_blocks=False):
+    """(clean title, clean body) shared by the chunker and the rerank
+    passage builder — tag-strip + whitespace collapse + title cap.
+
+    strip_blocks: also drop <style>/<script> BLOCK CONTENT before
+    tag-stripping. Passage-side only — the chunker must stay byte-stable
+    or the hash-keyed embedding cache invalidates wholesale (a full
+    multi-hour re-embed). CSS pollution inside chunks is a known
+    indexer-quality debt (2026-11-25 replay finding: Lazada invoices'
+    passages were ~pure stylesheet text)."""
     if _type == "Attachment":
         title, body = d.get("filename", "") or d.get("title", ""), d.get("description", "")
     else:
         title, body = (d.get("title", "") or d.get("subject", "")), \
                       (d.get("description", "") or d.get("summary", ""))
     if body and "<" in body and ">" in body:
+        if strip_blocks:
+            body = BLOCK_RE.sub(" ", body)
         body = TAG_RE.sub(" ", body)
     body = WS_RE.sub(" ", body or "").strip()
     title = WS_RE.sub(" ", title or "").strip()[:TITLE_CAP]
+    return title, body
+
+
+def chunk_texts_for(d, _type):
+    """Title-prepended chunks for one item's data dict."""
+    title, body = _title_body(d, _type)
     if not body:
         return [title] if title else []
     pieces = chunk_text(body)
     if title:
         pieces = [f"{title} — {p}" for p in pieces]
     return pieces
+
+
+def passage_for(d, _type, max_chars=1700):
+    """One document-level passage: title + tag-stripped body prefix.
+
+    The reranker's input — unlike the chunked embedder it sees query and
+    document JOINTLY, so it wants the widest document view that fits its
+    512-token window (~1700 chars) rather than a single chunk. Brand,
+    sender and period signals ("Lazada", "Nov 2026") that live near the
+    top of the body land inside it; the tokenizer clamps overflow.
+    style/script block content is dropped (CSS turned Lazada-invoice
+    passages into stylesheet noise — 2026-11-25 replay finding).
+    """
+    title, body = _title_body(d, _type, strip_blocks=True)
+    if not body:
+        return title
+    if not title:
+        return body[:max_chars]
+    return f"{title} — {body[:max_chars - len(title) - 3]}"
 
 
 def main():

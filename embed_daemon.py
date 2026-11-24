@@ -25,8 +25,23 @@ Protocol: one JSON request per connection.
   {"op": "ping"}                                  -> {"ok": true}
   {"op": "search", "q": str, "scopes": [uuid]|null,
    "types": [str]|null, "k": int}                 -> {"results": [[uuid, score], …]}
+  {"op": "rerank", "q": str, "uuids": [uuid]}    -> {"results": [[uuid, logit], …]}
 Exit after IDLE_SECONDS without a request (memory returns to zero; the
 next search simply cold-starts again).
+
+Rerank (api#95 final slice): scoring-only by contract — the api composes
+planes and enforces scopes at its boundary, so `uuids` arrive already
+visibility-filtered; superseded/gone/unknown uuids are simply absent
+from the response. Per item ONE cross-encoder pair: (query, document
+passage) where the passage is title + tag-stripped body prefix
+(~1700 chars — the widest document view the reranker's 512-token window
+holds; brand/period signals like "Lazada" or "Nov 2026" live near the
+top of bodies, and a single embedder chunk hides them). Replay-learned
+2026-11-25: single-chunk pairing LOST to baseline on 4/6 golden queries
+because document-level signals sat outside the chunk; the passage view
+is the cross-encoder's whole edge over cosine.
+bge-reranker-base, int8-quantized, lazy-loaded on first use (see
+reranker.py).
 """
 import hashlib
 import json
@@ -40,7 +55,12 @@ import numpy as np
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-SOCK = Path.home() / ".local/share/memogarden/triage-model/embed.sock"
+# Same env var the api client honours (search_daemon._embed_sock) — keeps
+# client/daemon symmetric and lets golden-replay runs use a throwaway
+# socket instead of the systemd-owned one. Self-bind mode only.
+SOCK = Path(os.environ.get(
+    "MEMOGARDEN_EMBED_SOCK",
+    str(Path.home() / ".local/share/memogarden/triage-model/embed.sock")))
 CACHE_DIR = Path(os.environ.get(
     "MEMOGARDEN_SEARCH_CACHE", str(HERE / "cache")))
 IDLE_SECONDS = 600
@@ -52,6 +72,7 @@ CATCHUP_MAX_PASSES = 50
 import sqlite3  # noqa: E402  (after sys.path insert)
 
 import index_store  # noqa: E402
+import reranker  # noqa: E402
 import build_search_index as bsi  # noqa: E402  (chunking + embed helpers)
 
 EMB_CACHE = CACHE_DIR / "search_emb.npz"
@@ -88,6 +109,56 @@ def chunk_texts_for_row(row):
     """Title-prepended chunk texts for a live item row."""
     d = json.loads(row["data"]) if row["data"] else {}
     return bsi.chunk_texts_for(d, row["_type"])
+
+
+def passage_for_row(row):
+    """Document-level rerank passage for a live item row."""
+    d = json.loads(row["data"]) if row["data"] else {}
+    return bsi.passage_for(d, row["_type"])
+
+
+def build_pairs(uuids, texts_by_uuid):
+    """(kept uuids, pair texts) — dedup in request order, skip items
+    with no text at all."""
+    kept, texts, seen = [], [], set()
+    for u in uuids:
+        if u in seen:
+            continue
+        seen.add(u)
+        t = texts_by_uuid.get(u) or ""
+        if not t:
+            continue
+        kept.append(u)
+        texts.append(t)
+    return kept, texts
+
+
+def rerank(req, conn, idx, embed_query):
+    """Scoring-only rerank op: cross-encoder logits best-first.
+
+    `conn` is the daemon's persistent read-only soil connection; `idx`
+    and `embed_query` are unused today (passages need no query vector —
+    kept in the signature so callers don't branch on daemon version).
+    Unknown/superseded/empty uuids silently drop out (the response
+    covers exactly the uuids that could be scored).
+    """
+    q = str(req.get("q", ""))[:1000]
+    uuids = [str(u) for u in (req.get("uuids") or [])][:reranker.MAX_PAIRS]
+    if not q or not uuids:
+        return {"results": []}
+    marks = ",".join("?" * len(uuids))
+    texts_by_uuid = {}
+    for row in conn.execute(
+            f"""SELECT uuid, data, _type FROM item
+                WHERE uuid IN ({marks}) AND superseded_by IS NULL""",
+            uuids):
+        texts_by_uuid[row["uuid"]] = passage_for_row(row)
+    kept, pairs = build_pairs(uuids, texts_by_uuid)
+    if not kept:
+        return {"results": []}
+    logits = reranker.score_pairs([(q, t) for t in pairs])
+    ranked = sorted(zip(kept, logits), key=lambda p: -p[1])
+    return {"results": [[u, round(float(s), 4)] for u, s in ranked]}
 
 
 def catch_up(conn, idx, tok, model):
@@ -230,6 +301,8 @@ def main():
                 out = {"ok": True}
             elif op == "search":
                 out = search(req)
+            elif op == "rerank":
+                out = rerank(req, conn, idx, embed_query)
             else:
                 out = {"error": f"unknown op {op!r}"}
             conn_srv.sendall(json.dumps(out).encode())

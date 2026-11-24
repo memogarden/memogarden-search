@@ -1,0 +1,145 @@
+{
+  "golden": "/home/kureshii/memogarden/wt-rerank-search/tools/golden_set.json",
+  "k": 10,
+  "depth": 10,
+  "rows": [
+    {
+      "q": "Senoko bill November",
+      "base_mrr5": 0.5,
+      "rerank_mrr5": 0.0,
+      "base_hit5": 1.0,
+      "rerank_hit5": 0.0,
+      "verdict": "loss",
+      "base_top": [
+        "soil_c6afb050-d919-4cab-b6a4-25ac7d0b0314",
+        "soil_cd06de37-fd1e-48d4-8a72-4411e7a08ffd",
+        "soil_9d6495f6-1980-4e79-bb14-0aff14b8b862",
+        "soil_cfb15b5e-e9f7-416e-92fc-7cb3f4f6c673",
+        "soil_6669de9f-fdd5-4026-b44d-1254dfcab9e8"
+      ],
+      "rerank_top": [
+        "soil_020c742f-0461-478a-8c8b-74183cba3167",
+        "soil_cfb15b5e-e9f7-416e-92fc-7cb3f4f6c673",
+        "soil_de7b0297-5def-457f-93fb-c359496028f8",
+        "soil_c6afb050-d919-4cab-b6a4-25ac7d0b0314",
+        "soil_6669de9f-fdd5-4026-b44d-1254dfcab9e8"
+      ]
+    },
+    {
+      "q": "Lazada invoice for my order",
+      "base_mrr5": 1.0,
+      "rerank_mrr5": 0.333,
+      "base_hit5": 1.0,
+      "rerank_hit5": 1.0,
+      "verdict": "loss",
+      "base_top": [
+        "soil_d4161cb4-d151-43b1-a995-1c08d4d7d2dc",
+        "soil_d0c067b3-8511-4619-946a-d3e4bd01662f",
+        "soil_c3094288-023b-46e3-9664-63a33dd2c4e3",
+        "soil_9ef0f7f6-dcf5-4a7f-b2da-f08ce113f70d",
+        "soil_1a66b4f1-60df-4da8-b1e4-32fe2b44fad4"
+      ],
+      "rerank_top": [
+        "soil_9ef0f7f6-dcf5-4a7f-b2da-f08ce113f70d",
+        "soil_1a66b4f1-60df-4da8-b1e4-32fe2b44fad4",
+        "soil_d0c067b3-8511-4619-946a-d3e4bd01662f",
+        "soil_f3ff1037-e135-4145-81d5-ddc929546ba8",
+        "soil_3543b460-c328-4c26-992e-b0a1498e753d"
+      ]
+    },
+    {
+      "q": "AWS receipt",
+      "base_mrr5": 1.0,
+      "rerank_mrr5": 0.2,
+      "base_hit5": 1.0,
+      "rerank_hit5": 1.0,
+      "verdict": "loss",
+      "base_top": [
+        "soil_81c43a4b-9d7c-49dc-9ba7-bb1fc4fd4d63",
+        "soil_b51d35b3-36de-48b8-be13-670eca607557",
+        "soil_63d26e34-fffd-4ab0-a6fa-94db3d7b37bf",
+        "soil_87d600f5-c1ce-47ee-bb3c-75deded3cc0d",
+        "soil_b9314e98-224d-4b29-baa1-6c9a76ae2de8"
+      ],
+      "rerank_top": [
+        "soil_03c9d3e6-aaf2-4ce7-ac6b-a6ebca00c944",
+        "soil_534f81f1-2ee0-47d5-b04c-fea73711f364",
+        "soil_6fd8d702-7400-4ab8-ab1c-105b1d999aeb",
+        "soil_63d26e34-fffd-4ab0-a6fa-94db3d7b37bf",
+        "soil_81c43a4b-9d7c-49dc-9ba7-bb1fc4fd4d63"
+      ]
+    },
+    {
+      "q": "school fee payment",
+      "base_mrr5": 1.0,
+      "rerank_mrr5": 1.0,
+      "base_hit5": 1.0,
+      "rerank_hit5": 1.0,
+      "verdict": "par",
+      "base_top": [
+        "soil_ec3ced6d-343e-4f6e-ade4-64d6686e1d5c",
+        "soil_5c556b8b-9072-4e66-ba52-376fbe98cac2",
+        "soil_180df537-d8fc-44de-8037-1f10f5943d04",
+        "soil_df10c5d3-1bb2-49e3-a116-2a68c1e6fb5c",
+        "soil_ee1e3761-52ee-4c73-8c29-a19fb5b16878"
+      ],
+      "rerank_top": [
+        "soil_ec3ced6d-343e-4f6e-ade4-64d6686e1d5c",
+        "soil_bcd22be5-d291-4ab4-8146-9d682515fd54",
+        "soil_5c556b8b-9072-4e66-ba52-376fbe98cac2",
+        "soil_df10c5d3-1bb2-49e3-a116-2a68c1e6fb5c",
+        "soil_ee1e3761-52ee-4c73-8c29-a19fb5b16878"
+      ]
+    },
+    {
+      "q": "flight booking confirmation",
+      "base_mrr5": 1.0,
+      "rerank_mrr5": 0.333,
+      "base_hit5": 1.0,
+      "rerank_hit5": 1.0,
+      "verdict": "loss",
+      "base_top": [
+        "soil_ac616a38-ee42-4822-a4cf-93bfa9e37abc",
+        "soil_fef120ad-1ffe-4973-9fd5-ccb52aaf687e",
+        "soil_8aad5008-223f-49ee-84e3-a538d5b130b4",
+        "soil_e5c09c87-99ca-41d0-a334-095a95b45cd5",
+        "soil_257a9d5b-01a4-49f1-8467-d5c5d25a5de8"
+      ],
+      "rerank_top": [
+        "soil_ffd3bd78-ea9c-44f5-8c70-8847495a73d6",
+        "soil_5fb655d7-3006-40cc-9491-bd40b5c87e8f",
+        "soil_257a9d5b-01a4-49f1-8467-d5c5d25a5de8",
+        "soil_6aaba1d3-52ce-44f1-be86-42f2748ed705",
+        "soil_fef120ad-1ffe-4973-9fd5-ccb52aaf687e"
+      ]
+    },
+    {
+      "q": "insurance policy renewal",
+      "base_mrr5": 1.0,
+      "rerank_mrr5": 1.0,
+      "base_hit5": 1.0,
+      "rerank_hit5": 1.0,
+      "verdict": "par",
+      "base_top": [
+        "soil_030a0b89-ae8d-402e-9231-ccf31253ed24",
+        "soil_4a141699-969f-433e-8e27-6f298cb24f93",
+        "soil_b73bbfd0-7531-4725-91a9-16e8815fc05c",
+        "soil_1e9ddb77-a197-4e66-81ce-0e2efc8f149e",
+        "soil_b61aaf7d-0029-44be-a577-e2df9edd0e53"
+      ],
+      "rerank_top": [
+        "soil_030a0b89-ae8d-402e-9231-ccf31253ed24",
+        "soil_4a141699-969f-433e-8e27-6f298cb24f93",
+        "soil_914e804b-0f4d-4d18-98d9-90fe134b6954",
+        "soil_efa06d05-714c-4736-9dfe-a541ec409288",
+        "soil_b73bbfd0-7531-4725-91a9-16e8815fc05c"
+      ]
+    }
+  ],
+  "summary": {
+    "queries": 6,
+    "win": 0,
+    "par": 2,
+    "loss": 4
+  }
+}
