@@ -147,10 +147,12 @@ worth keeping:
   "SGLVGTI"-titled emails ARE Lazada invoices; there are SIX November
   Senoko bills (no text ranker encodes recency — that's a recency-sort
   feature, not a relevance one).
-- Known debt: CSS/style text still pollutes the EMBEDDER's chunks
-  (fixing `chunk_texts_for` would invalidate the whole hash-keyed
-  embedding cache → multi-hour re-embed; deliberate follow-up, tracked
-  in the session notes).
+- Known debt RESOLVED 2026-11-25: CSS/style text no longer pollutes the
+  EMBEDDER's chunks either (`_title_body` strips `<style>/<script>`
+  blocks unconditionally now; the rerank passage path had it first).
+  The hash-keyed cache made the fix cheap — 9,740 of 211,858 chunks
+  re-embedded (~30 min), index settled at 196,801 chunks / 63,803
+  items, daemon verified serving from the clean index.
 - Memory: with the reranker resident the daemon peaks ~2.3G RSS —
   **above the deploy unit's `MemoryHigh=2G`** (fits `MemoryMax=2500M`
   with thin headroom). If rerank sees regular use, bump the unit to
