@@ -1,0 +1,6 @@
+cache/
+hf-cache/
+.venv/
+*.log
+__pycache__/
+*.pyc
