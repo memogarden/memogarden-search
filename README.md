@@ -41,14 +41,17 @@ virtual table **inside `soil.db` itself**, declared
 `item.data`, and the index keeps only the token→rowid inverted index in
 its shadow tables (~600 MB over a ~2.4 GB corpus at ~266k items).
 Maintenance is trigger-based, never application-managed: an
-`AFTER INSERT` trigger indexes new rows; creation stamps an atomic
+`AFTER INSERT` trigger indexes new rows; an `AFTER DELETE` trigger
+(lifecycle sync, 2026-11-25) removes hard-deleted rows' tokens — closing
+the rowid-reuse ghost-token corruption vector; creation stamps an atomic
 `item_fts_created_maxrowid` boundary so the trigger can never overlap
 with the resumable `backfill_item_fts()` sweep; `rebuild_item_fts()`
 reconstructs everything from scratch (rebuild parity = the integrity
-check). Known gap: the index is insert-only today — superseded versions'
-tokens accumulate until the proposed lifecycle triggers (FTS5 `'delete'`
-commands on supersede/delete, re-index on data amendment) land;
-`live_only` filtering is the current compensator. The tokenizer is
+check). Deliberately no supersede trigger: FTS5 `'delete'` is
+exactly-once and an AU+AD pair double-fires into corruption, so
+superseded versions' tokens stay until a rebuild (`live_only` keeps
+results correct) — a weekly `memogarden-maintenance` systemd timer runs
+that rebuild. The tokenizer is
 `unicode61` (CJK runs are not tokenized — the console falls back to
 `LIKE` for CJK/substring recall).
 
