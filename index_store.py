@@ -144,14 +144,20 @@ def plan_from_change_log(conn, watermark, limit=300, live_types=None):
     uuid/_type/canonical_at/data/metadata), removes = [uuid] for rows
     now superseded or gone. new_watermark advances only past fully
     planned seqs — the bounded remainder re-plans on the next wake.
-    change_log stores prefixed uuids (`soil_…`); item.uuid is plain.
+
+    `change_log.uuid` is `item.uuid` verbatim — `soil_`-prefixed, the
+    same form the index keys use — so it is used as stored. (Until
+    2026-11-26 the `soil_` prefix was stripped here on the false premise
+    that `item.uuid` is plain: every lookup missed, every change looked
+    like a removal of an id the index did not have, and the watermark
+    advanced anyway — the catch-up has been a no-op since it shipped.)
     """
     rows = conn.execute(
         "SELECT seq, uuid FROM change_log WHERE tbl = 'item' AND seq > ? "
         "ORDER BY seq", (watermark,)).fetchall()
     ordered, seen, new_wm = [], set(), watermark
-    for seq, prefixed in rows:
-        u = prefixed[5:] if prefixed.startswith("soil_") else prefixed
+    for seq, item_uuid in rows:
+        u = item_uuid
         if u not in seen:
             if len(ordered) >= limit:
                 break

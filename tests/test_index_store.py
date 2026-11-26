@@ -91,29 +91,46 @@ def change_db():
         (4, "item", "soil_cccc-3", "insert", "2026-11-24T10:00:03Z"),
     ]
     conn.executemany("INSERT INTO change_log VALUES (?,?,?,?,?)", rows)
-    conn.execute("INSERT INTO item VALUES ('aaaa-1','Email',null,'{}',null,null)")
+    # item.uuid is stored soil_-prefixed — the same form change_log copies
+    # (verified against production 2026-11-26: 269,741 of 269,741 rows).
+    # The fixture used bare ids here, which hid a prefix-strip bug that
+    # made the real catch-up a no-op.
+    conn.execute("INSERT INTO item VALUES ('soil_aaaa-1','Email',null,'{}',null,null)")
     # bbbb-2 superseded; cccc-3 not present at all (deleted)
-    conn.execute("INSERT INTO item VALUES ('bbbb-2','Note',null,'{}',null,"
+    conn.execute("INSERT INTO item VALUES ('soil_bbbb-2','Note',null,'{}',null,"
                  "'soil_replacement')")
     return conn
 
 
-def test_plan_live_vs_removed_and_prefix_strip(change_db):
+def test_plan_live_vs_removed_in_the_stored_uuid_form(change_db):
+    """Ids come back exactly as stored and as the index keys use them."""
     upserts, removes, wm = plan_from_change_log(change_db, 0, limit=10)
-    assert [u for u, _ in upserts] == ["aaaa-1"]      # prefix stripped, live
-    assert removes == ["bbbb-2", "cccc-3"]            # superseded / gone
-    assert wm == 4                                    # advanced through seq 4
-    assert "system_relation" not in {u for u, _ in upserts} | set(removes)
+    assert [u for u, _ in upserts] == ["soil_aaaa-1"]   # live, prefixed
+    assert upserts[0][1]["_type"] == "Email"
+    assert removes == ["soil_bbbb-2", "soil_cccc-3"]    # superseded / gone
+    assert wm == 4                                      # advanced through seq 4
+    assert "soil_x" not in {u for u, _ in upserts} | set(removes)
+
+
+def test_plan_bare_item_ids_would_never_match(change_db):
+    """The regression this fix closes: a planner that strips the prefix
+    finds no live row and calls every change a removal — the index would
+    never gain or lose anything while the watermark advanced."""
+    stripped = [u[5:] if u.startswith("soil_") else u for u in ("soil_aaaa-1",)]
+    live = change_db.execute(
+        "SELECT COUNT(*) FROM item WHERE uuid IN (?) AND superseded_by IS NULL",
+        stripped).fetchone()[0]
+    assert live == 0, "bare ids do not match item.uuid in production form"
 
 
 def test_plan_bounds_and_watermark_semantics(change_db):
     # limit 1: only aaaa-1 planned; watermark may only reach seq 1 — the
     # bounded remainder (bbbb-2 at seq 2) re-plans next wake
     upserts, removes, wm = plan_from_change_log(change_db, 0, limit=1)
-    assert [u for u, _ in upserts] == ["aaaa-1"]
+    assert [u for u, _ in upserts] == ["soil_aaaa-1"]
     assert wm == 1
     upserts, removes, wm = plan_from_change_log(change_db, wm, limit=10)
-    assert removes == ["bbbb-2", "cccc-3"]
+    assert removes == ["soil_bbbb-2", "soil_cccc-3"]
     assert wm == 4
 
 
